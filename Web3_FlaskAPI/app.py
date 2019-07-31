@@ -224,7 +224,7 @@ def Balance():
         if w3.isConnected():
             try:
                     #幣別: wei  = ether * 10^18
-                    result = str(w3.eth.getBalance(address))
+                    result = str(w3.eth.getBalance(address)/10**18)
                     status = 200            
             except ValueError:
                     result = str(sys.exc_info()[1])
