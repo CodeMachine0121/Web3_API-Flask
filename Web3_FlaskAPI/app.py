@@ -6,6 +6,7 @@ from mnemonic import Mnemonic
 import pymysql
 import random
 import sys
+from crypher import prpcrypt
 
 w3=Web3(Web3.HTTPProvider("http://192.168.1.111:2001"))
 w3.middleware_stack.inject(geth_poa_middleware, layer=0)
@@ -59,17 +60,6 @@ def IsExit(priv_hash):
     else :
         return False
 
-# make tokens
-def randomstr():
-    seed = "1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    sa = []
-    #長度為8
-    for i in range(8):
-        sa.append(random.choice(seed))
-    salt = ''.join(sa)
-    print ('random token: ',salt)
-    return (salt)
-
 # 驗證
 def Authentication(token , priv_hash):
     
@@ -109,18 +99,22 @@ def RemoveData(priv_hash):
 #授權
 @app.route('/get_token',methods=['POST'])
 def Authorization():
-    token = randomstr()
+
+    cipher = prpcrypt()
+    # make session key  session key=token
+    token = cipher.keyMaker()
     priv_hash = request.json['id']
 
     priv_hash = priv_hash.replace(' ','')
-    print("key: ",priv_hash)
+    print("id: ",priv_hash)
+    print("token: ",token)
     # 如果是空字串
     if priv_hash == "":
         result = 'Illegal key'
         # 422 Unprocessable Entity（
         status=422
         return make_response( jsonify({'response':result}),status )
-   
+
     else:
 
         if IsExit(priv_hash):
