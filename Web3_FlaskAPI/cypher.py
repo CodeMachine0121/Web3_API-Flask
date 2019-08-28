@@ -6,11 +6,11 @@ from binascii import b2a_hex, a2b_hex
 class prpcrypt():  
     def __init__(self):  
         self.mode = AES.MODE_CBC  
-    def keyMaker():
+    def keyMaker(self):
         return Random.new().read(AES.block_size)
     #加密函數，如果text不是16的倍數【加密文本text必須為16的倍數！】，那就補足為16的倍數  
     def encrypt(self, text,key):  
-        cryptor = AES.new(key, self.mode, self.key)  
+        cryptor = AES.new(key, self.mode, key)  
         #這裏密鑰key 長度必須為16（AES-128）、24（AES-192）、或32（AES-256）Bytes 長度.目前AES-128足夠用  
         length = 16  
         count = len(text)  
@@ -26,17 +26,9 @@ class prpcrypt():
     
     #解密後，去掉補足的空格用strip() 去掉  
     def decrypt(self, text,key):  
-        cryptor = AES.new(key, self.mode, self.key)  
+        cryptor = AES.new(key, self.mode, key)  
         plain_text = cryptor.decrypt(bytes.fromhex(text)).decode()
 
         return plain_text.rstrip(" ")  
-   
-if __name__ == "__main__":  
-    
-    pc = prpcrypt() #初始化密鑰
 
-    e = pc.encrypt(b"0123456789ABCDE")  
-    d = pc.decrypt(e)                       
-    
-    print ("Key:",pc.key,"\nencrypt:",e,"\ndecrypt:",d)    
     
