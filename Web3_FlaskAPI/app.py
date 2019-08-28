@@ -8,13 +8,15 @@ import random
 import sys
 from crypher import prpcrypt
 
-w3=Web3(Web3.HTTPProvider("http://192.168.1.111:2001"))
+w3=Web3(Web3.HTTPProvider("http://192.168.0.2:2001"))
 w3.middleware_stack.inject(geth_poa_middleware, layer=0)
 if w3.isConnected:
     print("Connected!")
 
+host = "192.168.0.2"
 app = Flask("Web3 Service")
 
+cipher = prpcrypt()
 
 name = 'james'
 passwd = 'ksz54213'
@@ -99,10 +101,13 @@ def RemoveData(priv_hash):
 #授權
 @app.route('/get_token',methods=['POST'])
 def Authorization():
-
-    cipher = prpcrypt()
+    # token 用 hash 方式保存  ==  session key
     # make session key  session key=token
-    token = cipher.keyMaker()
+    print(request.json)
+
+    token = str(cipher.keyMaker().hex()) #str hex
+    
+    print("new key: ",token)
     priv_hash = request.json['id']
 
     priv_hash = priv_hash.replace(' ','')
@@ -139,11 +144,15 @@ def Transaction():
     data = request.get_json(silent =True)
     txn = data['data']
     priv_hash = data['id']
-    token = data['token']
-  
+
+    token = data['token'].encode('utf-8')
+    
    
     if Authentication(token,priv_hash):
         
+        txn  = cipher.decrypt(txn,token).decode()
+
+        print("decrypt txn:",txn)
         if w3.isConnected():
             try:
                     # 取得交易資訊
@@ -171,20 +180,31 @@ def Transaction():
 
 @app.route('/nonce',methods=['POST'])
 def Nonce():
-    try:
-        address = w3.toChecksumAddress(request.json['data'])
+    
+    try:#解密
+        token = request.json['token'] # str hex 
+        address =request.json['data'] # str encrypt hex
+        priv_hash = request.json['id']# str hex
+
+        token = bytes.fromhex(token) #bytes
+
+        address = cipher.decrypt(address,token) #str
+        address = w3.toChecksumAddress(address)
+        
+    
     except ValueError:
         status=400  
         return make_response( jsonify({'response':'wrong fromat'}),status)
-    token = request.json['token']
-    priv_hash = request.json['id']
     print("address: ",address)
     print("token: ",token)
     print("priv_hash: ",priv_hash)
-    if Authentication(token,priv_hash):
+    #convert bytes to str hex
+    if Authentication(token.hex(),priv_hash):
         if w3.isConnected():
             try:
-                    result = str(w3.eth.getTransactionCount(address))
+                    result = str(w3.eth.getTransactionCount(address)).encode("utf-8")
+                    #encrypt result & bytes in 
+                    result = cipher.encrypt(result,token)
                     status = 200            
             except ValueError:
                     result = str(sys.exc_info()[1])
@@ -195,7 +215,7 @@ def Nonce():
             result="Server not working"
             # 500 Internal Server Error
             status = 500
-        print(result)
+        print("nonce:",result)
         return make_response( jsonify({'response':result}),status)
     else:
         result = 'Authentication failed'
@@ -207,18 +227,26 @@ def Nonce():
 @app.route('/balance',methods=['POST'])
 def Balance():
     try:
-        address = w3.toChecksumAddress(request.json['data'])
+        address = request.json['data'] # str encrypt hex
+        token = request.json['token'] # str hex
+        priv_hash = request.json['id'] # str hex
+
+        token = bytes.fromhex(token)#bytes
+        
+        address = cipher.decrypt(address,token) #str plaintext
+        address = w3.toChecksumAddress(address)
+
     except ValueError:
         status=400  
         return make_response( jsonify({'response':'wrong fromat'}),status)
-    token = request.json['token']
-    priv_hash = request.json['id']
+    
 
-    if Authentication(token,priv_hash):
+    if Authentication(token.hex(),priv_hash):
         if w3.isConnected():
             try:
                     #幣別: wei  = ether * 10^18
-                    result = str(w3.eth.getBalance(address)/10**18)
+                    result = str(w3.eth.getBalance(address)/10**18).encode("utf-8")
+                    result = cipher.encrypt(result,token)
                     status = 200            
             except ValueError:
                     result = str(sys.exc_info()[1])
@@ -240,22 +268,34 @@ def Balance():
 @app.route('/forget_address',methods=['POST'] )
 def Get_back_keys(): 
     # 註記碼
-    mn = request.json['data']
+    mn = request.json['data'] #encrypt str
     #密碼
-    passwd = request.json['passwd']
-    token = request.json['token']
+    passwd = request.json['passwd'] #encrypt str
+    token = request.json['token'] # str
     priv_hash = request.json['id']
 
+    print("str hex mn:",mn)
 
-    if Authentication(token,priv_hash):
+    token = bytes.fromhex(token)
+
+    mn = cipher.decrypt(mn,token)
+    passwd = cipher.decrypt(passwd,token)
+
+
+    if Authentication(token.hex(),priv_hash):
         # choose the lang 
         m = Mnemonic('english')
         # get private    
         priv = w3.toHex(m.to_entropy(mn))
         # make new keyfile
-        json_keyfile = w3.eth.account.privateKeyToAccount(priv).encrypt(passwd)
+
+        json_keyfile = str(w3.eth.account.privateKeyToAccount(priv).encrypt(passwd)).encode("utf-8")
+
+
+        json_keyfile = cipher.encrypt(json_keyfile,token)
         status=200
         return make_response(jsonify({'response':json_keyfile}), status)
+
     else:
         result = 'Authentication failed'
         # 401 Unauthorized
@@ -266,7 +306,7 @@ def Get_back_keys():
         
     
 
-app.run(host='192.168.1.111',port=5000,debug=True)
+app.run(host=host,port=5000,debug=True)
 
 
 
