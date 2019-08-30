@@ -156,7 +156,7 @@ def Transaction():
         
         detxn  = cipher.decrypt(txn,key,iv).split(' ')
         print("decrypt txn ", type(detxn))
-        print(detxn.strip())
+        
         if w3.isConnected():
             try:
                     # 取得交易資訊
