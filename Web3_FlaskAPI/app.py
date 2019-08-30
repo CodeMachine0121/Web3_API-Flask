@@ -154,7 +154,7 @@ def Transaction():
    
     if Authentication(token,priv_hash):
         
-        detxn  = cipher.decrypt(txn,key,iv).split(' ')
+        detxn  = cipher.decrypt(txn,key,iv).split(' ')[0]
         print("decrypt txn ", type(detxn))
         
         if w3.isConnected():
