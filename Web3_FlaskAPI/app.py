@@ -8,12 +8,12 @@ import random
 import sys
 from crypher import prpcrypt
 
-w3=Web3(Web3.HTTPProvider("http://192.168.0.2:2001"))
+w3=Web3(Web3.HTTPProvider("http://192.168.50.20:2001"))
 w3.middleware_stack.inject(geth_poa_middleware, layer=0)
 if w3.isConnected:
     print("Connected!")
 
-host = "192.168.0.2"
+host = "192.168.50.20"
 app = Flask("Web3 Service")
 
 cipher = prpcrypt()
@@ -105,9 +105,11 @@ def Authorization():
     # make session key  session key=token
     print(request.json)
 
-    token = str(cipher.keyMaker().hex()) #str hex
+    token = cipher.keyMaker() #str hex
     
     print("new key: ",token)
+
+    print("request json",request.json)
     priv_hash = request.json['id']
 
     priv_hash = priv_hash.replace(' ','')
@@ -129,11 +131,10 @@ def Authorization():
             return make_response( jsonify({'response':result}),status )
         else:
             x = insert_value_sql(token,priv_hash)
-            if x==True:
-                status=200
-                return make_response( jsonify({'response':token}),status )
-            else:
-                return make_response( jsonify({'response':'Authorization failed'}) )
+
+            status=200
+            return make_response( jsonify({'response':token}),status )
+
 
 
 
@@ -142,28 +143,32 @@ def Transaction():
 
     print("txn: ")
     data = request.get_json(silent =True)
-    txn = data['data']
-    priv_hash = data['id']
-
-    token = data['token'].encode('utf-8')
+    txn = data['data']#str encryption
+    priv_hash = data['id']#str
+    token = data['token']# str hex
     
+    tokens = token.split("xx")
+    key = bytes.fromhex(tokens[0])
+    iv = bytes.fromhex(tokens[1])
+    print(txn)
    
     if Authentication(token,priv_hash):
         
-        txn  = cipher.decrypt(txn,token).decode()
-
-        print("decrypt txn:",txn)
+        detxn  = cipher.decrypt(txn,key,iv).split(' ')
+        print("decrypt txn ", type(detxn))
+        print(detxn.strip())
         if w3.isConnected():
             try:
                     # 取得交易資訊
-                    rawTransaction = int(txn, 16) 
+                    rawTransaction=detxn
+                  
                     #丟交易
-                    tmp = w3.eth.sendRawTransaction(hex(rawTransaction)) 
+                    tmp = w3.eth.sendRawTransaction(rawTransaction) 
                     result = "Successfully"
                     status = 200            
             except ValueError:
                     result = str(sys.exc_info()[1])
-                    result = '{' + result.split(',')[1]
+                    #result = '{' + result.split(',')[1]
                     print("error: ",result)
                     # 400 Bad request
                     status=400
@@ -181,30 +186,26 @@ def Transaction():
 @app.route('/nonce',methods=['POST'])
 def Nonce():
     
-    try:#解密
-        token = request.json['token'] # str hex 
-        address =request.json['data'] # str encrypt hex
-        priv_hash = request.json['id']# str hex
-
-        token = bytes.fromhex(token) #bytes
-
-        address = cipher.decrypt(address,token) #str
-        address = w3.toChecksumAddress(address)
-        
     
-    except ValueError:
-        status=400  
-        return make_response( jsonify({'response':'wrong fromat'}),status)
-    print("address: ",address)
-    print("token: ",token)
-    print("priv_hash: ",priv_hash)
+    token = request.json['token'] # str hex 
+    address =request.json['data'] # str encrypt hex
+    priv_hash = request.json['id']# str hex
+
+    
+    tokens=token.split("xx")
+    key = bytes.fromhex(tokens[0])
+    iv = bytes.fromhex(tokens[1])
+
+    address = cipher.decrypt(address,key,iv).split(" ")[0]#str
+
+    address = w3.toChecksumAddress(address)
     #convert bytes to str hex
-    if Authentication(token.hex(),priv_hash):
+    if Authentication(token,priv_hash):
         if w3.isConnected():
             try:
                     result = str(w3.eth.getTransactionCount(address)).encode("utf-8")
                     #encrypt result & bytes in 
-                    result = cipher.encrypt(result,token)
+                    result = cipher.encrypt(result,key,iv)
                     status = 200            
             except ValueError:
                     result = str(sys.exc_info()[1])
@@ -231,9 +232,14 @@ def Balance():
         token = request.json['token'] # str hex
         priv_hash = request.json['id'] # str hex
 
-        token = bytes.fromhex(token)#bytes
+        tokens = token.split("xx")
+        key = bytes.fromhex(tokens[0])
+        iv = bytes.fromhex(tokens[1])
         
-        address = cipher.decrypt(address,token) #str plaintext
+        address = cipher.decrypt(address,key,iv).split(' ')[0] #str plaintext
+        print("address: ",address)
+        print("token: ",token)
+        print("priv_hash: ",priv_hash)
         address = w3.toChecksumAddress(address)
 
     except ValueError:
@@ -241,12 +247,12 @@ def Balance():
         return make_response( jsonify({'response':'wrong fromat'}),status)
     
 
-    if Authentication(token.hex(),priv_hash):
+    if Authentication(token,priv_hash):
         if w3.isConnected():
             try:
                     #幣別: wei  = ether * 10^18
                     result = str(w3.eth.getBalance(address)/10**18).encode("utf-8")
-                    result = cipher.encrypt(result,token)
+                    result = cipher.encrypt(result,key,iv)
                     status = 200            
             except ValueError:
                     result = str(sys.exc_info()[1])
@@ -276,13 +282,15 @@ def Get_back_keys():
 
     print("str hex mn:",mn)
 
-    token = bytes.fromhex(token)
+    tokens = token.split("xx")
+    key = bytes.fromhex(tokens[0])
+    iv = bytes.fromhex(tokens[1])
 
-    mn = cipher.decrypt(mn,token)
-    passwd = cipher.decrypt(passwd,token)
+    mn = cipher.decrypt(mn,key,iv).split('\f')
+    passwd = cipher.decrypt(passwd,key,iv)
 
 
-    if Authentication(token.hex(),priv_hash):
+    if Authentication(token,priv_hash):
         # choose the lang 
         m = Mnemonic('english')
         # get private    
@@ -292,7 +300,7 @@ def Get_back_keys():
         json_keyfile = str(w3.eth.account.privateKeyToAccount(priv).encrypt(passwd)).encode("utf-8")
 
 
-        json_keyfile = cipher.encrypt(json_keyfile,token)
+        json_keyfile = cipher.encrypt(json_keyfile,key,iv)
         status=200
         return make_response(jsonify({'response':json_keyfile}), status)
 
@@ -307,6 +315,7 @@ def Get_back_keys():
     
 
 app.run(host=host,port=5000,debug=True)
+
 
 
 
