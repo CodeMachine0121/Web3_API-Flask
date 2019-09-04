@@ -1,25 +1,25 @@
-from web3 import *
-from web3.middleware import geth_poa_middleware
+from web3 import Web3
+#from web3.middleware import geth_poa_middleware
 import json
 from flask import Flask,jsonify,request,make_response
 from mnemonic import Mnemonic
 import pymysql
 import random
 import sys
-from crypher import prpcrypt
+from cypher import prpcrypt
 
-w3=Web3(Web3.HTTPProvider("http://192.168.50.20:2001"))
-w3.middleware_stack.inject(geth_poa_middleware, layer=0)
+w3=Web3(Web3.HTTPProvider("http://192.168.50.202:2001"))
+#w3.middleware_stack.inject(geth_poa_middleware, layer=0)
 if w3.isConnected:
     print("Connected!")
 
-host = "192.168.50.20"
+host = "192.168.50.202"
 app = Flask("Web3 Service")
 
 cipher = prpcrypt()
 
-name = 'james'
-passwd = 'ksz54213'
+name = 'root'
+passwd = 'mcuite'
 sql_name = 'web3_tokens'
 db_name = 'web3'
 
@@ -315,6 +315,8 @@ def Get_back_keys():
     
 
 app.run(host=host,port=5000,debug=True)
+
+
 
 
 
