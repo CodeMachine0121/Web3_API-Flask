@@ -1,25 +1,25 @@
-from web3 import Web3
-#from web3.middleware import geth_poa_middleware
+from web3 import *
+from web3.middleware import geth_poa_middleware
 import json
 from flask import Flask,jsonify,request,make_response
 from mnemonic import Mnemonic
 import pymysql
 import random
 import sys
-from cypher import prpcrypt
+from crypher import prpcrypt
 
-w3=Web3(Web3.HTTPProvider("http://192.168.50.202:2001"))
-#w3.middleware_stack.inject(geth_poa_middleware, layer=0)
+w3=Web3(Web3.HTTPProvider("http://192.168.50.20:2001"))
+w3.middleware_stack.inject(geth_poa_middleware, layer=0)
 if w3.isConnected:
     print("Connected!")
 
-host = "192.168.50.202"
+host = "192.168.50.20"
 app = Flask("Web3 Service")
 
 cipher = prpcrypt()
 
-name = 'root'
-passwd = 'mcuite'
+name = 'james'
+passwd = 'ksz54213'
 sql_name = 'web3_tokens'
 db_name = 'web3'
 
@@ -53,7 +53,7 @@ def insert_value_sql(token,priv_hash):
 def IsExit(priv_hash):
     db = pymysql.connect('localhost',name,passwd,db_name)
     cursor = db.cursor()
-    mysql = 'select token from web3_tokens where  exists( select id from web3_tokens where id ="'+ priv_hash +'")'
+    mysql = "select 1 from web3_tokens where id = '"+priv_hash+"' limit 1"
     data = cursor.execute(mysql)
     #print('data: ',data)
     db.close()
@@ -103,15 +103,16 @@ def RemoveData(priv_hash):
 def Authorization():
     # token 用 hash 方式保存  ==  session key
     # make session key  session key=token
-    print(request.json)
+    #print(request.json)
 
     token = cipher.keyMaker() #str hex
     
-    print("new key: ",token)
+    #print("new key: ",token)
 
-    print("request json",request.json)
+    #print("request json",request.json)
     priv_hash = request.json['id']
 
+    
     priv_hash = priv_hash.replace(' ','')
     print("id: ",priv_hash)
     print("token: ",token)
@@ -152,35 +153,32 @@ def Transaction():
     iv = bytes.fromhex(tokens[1])
     print(txn)
    
-    if Authentication(token,priv_hash):
+    
         
-        detxn  = cipher.decrypt(txn,key,iv).split(' ')[0]
-        print("decrypt txn ", type(detxn))
-        
-        if w3.isConnected():
-            try:
-                    # 取得交易資訊
-                    rawTransaction=detxn
+    detxn  = cipher.decrypt(txn,key,iv).split(' ')[0]
+    print("type decrypt txn ", type(detxn))
+    print("decrypt txn ",txn)
+    if w3.isConnected():
+        try:
+                # 取得交易資訊
+            rawTransaction=detxn
                   
-                    #丟交易
-                    tmp = w3.eth.sendRawTransaction(rawTransaction) 
-                    result = "Successfully"
-                    status = 200            
-            except ValueError:
-                    result = str(sys.exc_info()[1])
-                    #result = '{' + result.split(',')[1]
-                    print("error: ",result)
-                    # 400 Bad request
-                    status=400
-                #txhasg = web3.toHex(web3.sha3(signed_txn.rawTransaction))
-        else:
-            result="Server not working"
-            # 500 Internal Server Error
-            status = 500
+             #丟交易
+            tmp = w3.eth.sendRawTransaction(rawTransaction) 
+            result = "Successfully"
+            status = 200            
+        except ValueError:
+            result = str(sys.exc_info()[1])
+            #result = '{' + result.split(',')[1]
+            print("error: ",result)
+            # 400 Bad request
+            status=400
+            #txhasg = web3.toHex(web3.sha3(signed_txn.rawTransaction))
     else:
-        result = 'Authentication failed'
-        # 401 Unauthorized
-        status=401
+        result="Server not working"
+            # 500 Internal Server Error
+        status = 500
+   
     return make_response( jsonify({'response':result}),status)
 
 @app.route('/nonce',methods=['POST'])
@@ -200,30 +198,25 @@ def Nonce():
 
     address = w3.toChecksumAddress(address)
     #convert bytes to str hex
-    if Authentication(token,priv_hash):
-        if w3.isConnected():
-            try:
-                    result = str(w3.eth.getTransactionCount(address)).encode("utf-8")
+    
+    if w3.isConnected():
+        try:
+            result = str(w3.eth.getTransactionCount(address)).encode("utf-8")
                     #encrypt result & bytes in 
-                    result = cipher.encrypt(result,key,iv)
-                    status = 200            
-            except ValueError:
-                    result = str(sys.exc_info()[1])
-                    result = '{' + result.split(',')[1]
+            result = cipher.encrypt(result,key,iv)
+            status = 200            
+        except ValueError:
+            result = str(sys.exc_info()[1])
+            result = '{' + result.split(',')[1]
                     # 400 Bad request
-                    status=400
-        else:
-            result="Server not working"
-            # 500 Internal Server Error
-            status = 500
-        print("nonce:",result)
-        return make_response( jsonify({'response':result}),status)
+            status=400
     else:
-        result = 'Authentication failed'
-        # 401 Unauthorized
-        status=401
-        return make_response( jsonify({'response':result}),status)
-
+        result=cipher.encrypt("Server not working".encode('utf-8'),key,iv)
+        # 500 Internal Server Error
+        status = 500
+    print("nonce:",result)
+    return make_response( jsonify({'response':result}),status)
+    
 
 @app.route('/balance',methods=['POST'])
 def Balance():
@@ -243,32 +236,29 @@ def Balance():
         address = w3.toChecksumAddress(address)
 
     except ValueError:
-        status=400  
-        return make_response( jsonify({'response':'wrong fromat'}),status)
+        status=400 
+        result = cipher.encrypt('wrong format'.encode('utf-8'),key,iv)
+        return make_response( jsonify({'response':result}),status)
     
 
-    if Authentication(token,priv_hash):
-        if w3.isConnected():
-            try:
+   
+    if w3.isConnected():
+        try:
                     #幣別: wei  = ether * 10^18
-                    result = str(w3.eth.getBalance(address)/10**18).encode("utf-8")
-                    result = cipher.encrypt(result,key,iv)
-                    status = 200            
-            except ValueError:
-                    result = str(sys.exc_info()[1])
-                    result = '{' + result.split(',')[1]
-                    # 400 Bad request
-                    status=400
-        else:
-            result="Server not working"
-            # 500 Internal Server Error
-            status = 500
-        return make_response( jsonify({'response':result}),status)
+            result = str(w3.eth.getBalance(address)/10**18).encode("utf-8")
+            result = cipher.encrypt(result,key,iv)
+            status = 200            
+        except ValueError:
+            result = str(sys.exc_info()[1])
+            result = cipher.encrypt('{' + result.split(',')[1].encode('utf-8'),key,iv)
+            # 400 Bad request
+            status=400
     else:
-        result = 'Authentication failed'
-        # 401 Unauthorized
-        status=401
-        return make_response( jsonify({'response':result}),status)
+        result=cipher.encrypt("Server not working".encode('utf-8'),key,iv)
+            # 500 Internal Server Error
+        status = 500
+    return make_response( jsonify({'response':result}),status)
+    
 
 
 @app.route('/forget_address',methods=['POST'] )
@@ -290,32 +280,26 @@ def Get_back_keys():
     passwd = cipher.decrypt(passwd,key,iv)
 
 
-    if Authentication(token,priv_hash):
-        # choose the lang 
-        m = Mnemonic('english')
-        # get private    
-        priv = w3.toHex(m.to_entropy(mn))
-        # make new keyfile
+    # choose the lang 
+    m = Mnemonic('english')
+    # get private    
+    priv = w3.toHex(m.to_entropy(mn))
+    # make new keyfile
 
-        json_keyfile = str(w3.eth.account.privateKeyToAccount(priv).encrypt(passwd)).encode("utf-8")
+    json_keyfile = str(w3.eth.account.privateKeyToAccount(priv).encrypt(passwd)).encode("utf-8")
 
 
-        json_keyfile = cipher.encrypt(json_keyfile,key,iv)
-        status=200
-        return make_response(jsonify({'response':json_keyfile}), status)
+    json_keyfile = cipher.encrypt(json_keyfile,key,iv)
+    status=200
+    return make_response(jsonify({'response':json_keyfile}), status)
 
-    else:
-        result = 'Authentication failed'
-        # 401 Unauthorized
-        status=401
-        return make_response( jsonify({'response':result}),status)
+   
 
     
         
     
 
 app.run(host=host,port=5000,debug=True)
-
 
 
 
